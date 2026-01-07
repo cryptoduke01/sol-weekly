@@ -51,13 +51,13 @@ export default async function RoundupPage({ params }: PageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-16">
-      <div className="mb-8">
+    <div className="mx-auto max-w-3xl px-4 md:px-6 py-12 md:py-16">
+      <div className="mb-6 md:mb-8">
         <Link
           href="/blog"
-          className="inline-flex items-center gap-2 text-sm text-text-muted font-light hover:text-text-secondary transition-colors"
+          className="inline-flex items-center gap-2 text-xs md:text-sm text-text-muted font-light hover:text-text-secondary transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3 w-3 md:h-4 md:w-4" />
           <span>Back to Blog</span>
         </Link>
       </div>

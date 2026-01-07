@@ -13,18 +13,18 @@ interface HeroSectionProps {
 
 export default function HeroSection({ latestRoundup }: HeroSectionProps) {
   return (
-    <section className="border-b border-bg-card/50 py-20">
-      <div className="mx-auto max-w-4xl px-6">
+    <section className="border-b border-bg-card/50 py-12 md:py-20">
+      <div className="mx-auto max-w-4xl px-4 md:px-6">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="mb-16"
+          className="mb-12 md:mb-16"
         >
-          <h1 className="text-6xl font-light text-text-primary mb-6 tracking-tight">
+          <h1 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-light text-text-primary mb-4 md:mb-6 tracking-tight">
             Solana Weekly Roundup
           </h1>
-          <p className="text-xl text-text-secondary font-light leading-relaxed max-w-2xl">
+          <p className="text-base md:text-lg lg:text-xl text-text-secondary font-light leading-relaxed max-w-2xl">
             Weekly updates from the Solana ecosystem. Curated every Friday.
           </p>
         </motion.div>

@@ -17,22 +17,22 @@ export default function BlogHeader({ roundup }: BlogHeaderProps) {
       transition={{ duration: 0.6 }}
       className="mb-8"
     >
-      <div className="mb-8 flex items-center gap-4 text-sm text-text-muted font-light">
+      <div className="mb-6 md:mb-8 flex items-center gap-4 text-xs md:text-sm text-text-muted font-light">
         <div className="flex items-center gap-1.5">
-          <Calendar className="h-4 w-4" />
+          <Calendar className="h-3 w-3 md:h-4 md:w-4" />
           <span>{formatDate(roundup.date)}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Clock className="h-4 w-4" />
+          <Clock className="h-3 w-3 md:h-4 md:w-4" />
           <span>{roundup.readingTime} min read</span>
         </div>
       </div>
 
-      <h1 className="text-5xl font-light text-text-primary mb-6 tracking-tight">
+      <h1 className="text-3xl md:text-4xl lg:text-5xl font-light text-text-primary mb-4 md:mb-6 tracking-tight">
         {roundup.title}
       </h1>
 
-      <p className="text-xl text-text-secondary font-light leading-relaxed mb-8">
+      <p className="text-base md:text-lg lg:text-xl text-text-secondary font-light leading-relaxed mb-6 md:mb-8">
         {roundup.description}
       </p>
 
@@ -41,13 +41,12 @@ export default function BlogHeader({ roundup }: BlogHeaderProps) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
-        className="w-full h-96 border border-bg-card/50 rounded-lg overflow-hidden bg-bg-card/30"
+        className="w-full h-64 md:h-80 lg:h-96 border border-bg-card/50 rounded-lg overflow-hidden bg-bg-card/30"
       >
         <div className="w-full h-full bg-gradient-to-br from-bg-card/50 to-bg-card/30 flex items-center justify-center">
-          <p className="text-text-muted text-sm font-light">Featured image placeholder</p>
+          <p className="text-text-muted text-xs md:text-sm font-light">Featured image placeholder</p>
         </div>
       </motion.div>
     </motion.div>
   );
 }
-

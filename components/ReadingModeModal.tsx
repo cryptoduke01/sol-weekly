@@ -149,27 +149,27 @@ export default function ReadingModeModal({
               {/* Content */}
               <div
                 ref={contentRef}
-                className="flex-1 overflow-y-auto p-8 prose prose-invert max-w-none"
+                className="flex-1 overflow-y-auto p-4 md:p-8 prose prose-invert max-w-none"
                 style={{
                   fontFamily: 'Georgia, serif',
-                  fontSize: '1.25rem',
-                  lineHeight: '1.8',
+                  fontSize: 'clamp(0.875rem, 2vw, 1.125rem)',
+                  lineHeight: '1.7',
                 }}
               >
-                <h1 className="text-4xl font-light text-text-primary mb-6 leading-tight">
+                <h1 className="text-2xl md:text-3xl lg:text-4xl font-light text-text-primary mb-4 md:mb-6 leading-tight">
                   {title}
                 </h1>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
                     p: ({ node, ...props }) => (
-                      <p className="mb-6 text-text-secondary font-light leading-relaxed" {...props} />
+                      <p className="mb-4 md:mb-6 text-text-secondary font-light leading-relaxed text-sm md:text-base" {...props} />
                     ),
                     h2: ({ node, ...props }) => (
-                      <h2 className="text-3xl font-light text-text-primary mb-4 mt-10 leading-tight" {...props} />
+                      <h2 className="text-xl md:text-2xl lg:text-3xl font-light text-text-primary mb-3 md:mb-4 mt-6 md:mt-10 leading-tight" {...props} />
                     ),
                     h3: ({ node, ...props }) => (
-                      <h3 className="text-2xl font-light text-text-primary mb-3 mt-8 leading-tight" {...props} />
+                      <h3 className="text-lg md:text-xl lg:text-2xl font-light text-text-primary mb-2 md:mb-3 mt-4 md:mt-8 leading-tight" {...props} />
                     ),
                     strong: ({ node, ...props }) => (
                       <strong className="font-normal text-text-primary" {...props} />

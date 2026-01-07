@@ -36,8 +36,8 @@ export default function RoundupCard({
       <Link href={`/roundup/${roundup.slug}`} onClick={handleClick}>
         <article
           className={cn(
-            'group border-b border-bg-card/50 py-8 transition-colors hover:border-text-muted/30 relative',
-            featured && 'pb-12',
+            'group border-b border-bg-card/50 py-6 md:py-8 transition-colors hover:border-text-muted/30 relative',
+            featured && 'pb-8 md:pb-12',
             isLoading && 'opacity-50 pointer-events-none'
           )}
         >
@@ -47,39 +47,41 @@ export default function RoundupCard({
             </div>
           )}
 
-          <div className="mb-4 flex items-center gap-4 text-sm text-text-muted font-light">
+          <div className="mb-3 md:mb-4 flex items-center gap-4 text-xs md:text-sm text-text-muted font-light">
             <div className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4" />
+              <Calendar className="h-3 w-3 md:h-4 md:w-4" />
               <span>{formatDateShort(roundup.date)}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4" />
+              <Clock className="h-3 w-3 md:h-4 md:w-4" />
               <span>{roundup.readingTime} min</span>
             </div>
           </div>
 
           <h2
             className={cn(
-              'mb-4 font-light text-text-primary transition-colors group-hover:text-text-secondary',
-              featured ? 'text-4xl' : 'text-3xl'
+              'mb-3 md:mb-4 font-light text-text-primary transition-colors group-hover:text-text-secondary',
+              featured 
+                ? 'text-2xl md:text-3xl lg:text-4xl' 
+                : 'text-xl md:text-2xl lg:text-3xl'
             )}
           >
             {roundup.title}
           </h2>
 
-          <p className="text-base text-text-secondary font-light leading-relaxed mb-4">
+          <p className="text-sm md:text-base text-text-secondary font-light leading-relaxed mb-4">
             {roundup.description}
           </p>
 
           {/* Image Placeholder */}
-          <div className="mt-6 w-full h-64 border border-bg-card/50 rounded-lg overflow-hidden bg-bg-card/30">
+          <div className="mt-4 md:mt-6 w-full h-48 md:h-64 border border-bg-card/50 rounded-lg overflow-hidden bg-bg-card/30">
             <div className="w-full h-full bg-gradient-to-br from-bg-card/50 to-bg-card/30 flex items-center justify-center">
-              <p className="text-text-muted text-sm font-light">Image placeholder</p>
+              <p className="text-text-muted text-xs md:text-sm font-light">Image placeholder</p>
             </div>
           </div>
 
           {roundup.categories.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-4">
+            <div className="flex flex-wrap gap-2 mt-3 md:mt-4">
               {roundup.categories.map((category) => (
                 <span
                   key={category}
