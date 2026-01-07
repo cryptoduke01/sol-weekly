@@ -51,8 +51,6 @@ export default async function RoundupPage({ params }: PageProps) {
     notFound();
   }
 
-  const mdxContent = await serializeRoundupContent(roundup.content);
-
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
       <Link
@@ -65,9 +63,7 @@ export default async function RoundupPage({ params }: PageProps) {
 
       <BlogHeader roundup={roundup} />
 
-      <div className="prose prose-invert max-w-none">
-        <MDXRemote source={mdxContent.compiledSource} />
-      </div>
+      <MarkdownContent content={roundup.content} />
 
       <ShareButtons title={roundup.title} url={`/roundup/${roundup.slug}`} />
     </div>
