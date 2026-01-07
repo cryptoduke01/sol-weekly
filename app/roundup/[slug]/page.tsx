@@ -1,11 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getRoundupBySlug, getAllRoundups } from '@/lib/mdx';
-import { formatDate } from '@/lib/utils';
-import { Calendar, Clock, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import ShareButtons from '@/components/ShareButtons';
 import BlogHeader from '@/components/BlogHeader';
-import MarkdownContent from '@/components/MarkdownContent';
+import BlogContent from '@/components/BlogContent';
 import type { Metadata } from 'next';
 
 interface PageProps {
@@ -53,17 +52,24 @@ export default async function RoundupPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
-      <Link
-        href="/blog"
-        className="mb-12 inline-flex items-center gap-2 text-sm text-text-muted font-light hover:text-text-secondary transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span>Back to Blog</span>
-      </Link>
+      <div className="mb-8">
+        <Link
+          href="/blog"
+          className="inline-flex items-center gap-2 text-sm text-text-muted font-light hover:text-text-secondary transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back to Blog</span>
+        </Link>
+      </div>
 
       <BlogHeader roundup={roundup} />
 
-      <MarkdownContent content={roundup.content} />
+      <BlogContent 
+        content={roundup.content} 
+        title={roundup.title}
+        author="duke.sol"
+        date={roundup.date}
+      />
 
       <ShareButtons title={roundup.title} url={`/roundup/${roundup.slug}`} />
     </div>

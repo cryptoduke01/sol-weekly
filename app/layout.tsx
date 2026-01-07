@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LoadingScreen from "@/components/LoadingScreen";
+import PageLoader from "@/components/PageLoader";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 const inter = Inter({
@@ -45,6 +46,7 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <LoadingScreen />
+          <PageLoader />
           <div className="flex min-h-screen flex-col pb-20">
             <Header />
             <main className="flex-1">{children}</main>

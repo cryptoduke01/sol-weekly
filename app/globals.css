@@ -72,6 +72,11 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Cursor pointers for all interactive elements */
+a, button, [role="button"] {
+  cursor: pointer;
+}
+
 /* Glassmorphism utility classes - reduced */
 .glass {
   background: rgba(255, 255, 255, 0.02);

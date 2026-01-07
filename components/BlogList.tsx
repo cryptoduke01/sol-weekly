@@ -2,10 +2,11 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, ChevronDown } from 'lucide-react';
+import { Calendar, ChevronDown, Loader2 } from 'lucide-react';
 import { Roundup } from '@/lib/types';
 import { formatDateShort } from '@/lib/utils';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 interface BlogListProps {
@@ -15,6 +16,8 @@ interface BlogListProps {
 export default function BlogList({ roundups }: BlogListProps) {
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest');
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+  const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+  const router = useRouter();
 
   const sortedRoundups = useMemo(() => {
     const sorted = [...roundups].sort((a, b) => {
@@ -35,6 +38,12 @@ export default function BlogList({ roundups }: BlogListProps) {
 
     return grouped;
   }, [roundups, sortBy]);
+
+  const handleClick = (e: React.MouseEvent, slug: string) => {
+    e.preventDefault();
+    setLoadingSlug(slug);
+    router.push(`/roundup/${slug}`);
+  };
 
   return (
     <div>
@@ -100,9 +109,15 @@ export default function BlogList({ roundups }: BlogListProps) {
                   <Link
                     key={roundup.slug}
                     href={`/roundup/${roundup.slug}`}
-                    className="block group"
+                    onClick={(e) => handleClick(e, roundup.slug)}
+                    className="block group relative"
                   >
                     <div className="flex items-center gap-4 py-4 border-b border-bg-card/50 group-hover:border-text-muted/30 transition-colors">
+                      {loadingSlug === roundup.slug && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/50 z-10">
+                          <Loader2 className="h-5 w-5 text-text-primary animate-spin" />
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-sm text-text-muted font-light">
                         <Calendar className="h-4 w-4" />
                         <span>{formatDateShort(roundup.date)}</span>
@@ -126,4 +141,3 @@ export default function BlogList({ roundups }: BlogListProps) {
     </div>
   );
 }
-
