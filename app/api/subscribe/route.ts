@@ -140,10 +140,25 @@ export async function POST(request: Request) {
     // File-based storage (works on local, not on Vercel)
     const isVercel = process.env.VERCEL || process.env.VERCEL_ENV;
     
-    // On Vercel, file storage doesn't work - require Resend
+    // On Vercel, file storage doesn't work
     if (isVercel) {
+      // Check if we have Resend API key but no audience ID
+      if (process.env.RESEND_API_KEY && !process.env.RESEND_AUDIENCE_ID) {
+        return NextResponse.json(
+          { 
+            error: 'Email subscription requires RESEND_AUDIENCE_ID. You have RESEND_API_KEY but need to create an Audience in Resend Dashboard and add the Audience ID to Vercel environment variables.',
+            help: 'Go to resend.com/dashboard → Audiences → Create Audience → Copy Audience ID → Add to Vercel'
+          },
+          { status: 503 }
+        );
+      }
+      
+      // If no Resend setup at all, show helpful error
       return NextResponse.json(
-        { error: 'Email subscription requires RESEND_AUDIENCE_ID to be configured. Please set it in your Vercel environment variables.' },
+        { 
+          error: 'Email subscription is not configured. Please set RESEND_AUDIENCE_ID in your Vercel environment variables.',
+          help: 'Create an Audience in Resend Dashboard and add the Audience ID to Vercel'
+        },
         { status: 503 }
       );
     }
@@ -208,20 +223,23 @@ export async function GET(request: Request) {
     );
   }
 
-  // Decode the key properly (handles URL encoding of special characters like #)
-  const providedKey = decodeURIComponent(adminKey || '').trim();
-  const envKey = process.env.ADMIN_KEY.trim();
+  // Decode and normalize the key (handles URL encoding)
+  const providedKey = adminKey ? decodeURIComponent(adminKey).trim() : '';
+  const envKey = (process.env.ADMIN_KEY || '').trim();
 
-  // Compare keys
-  if (providedKey !== envKey) {
+  // Compare keys (case-sensitive, exact match)
+  if (!providedKey || providedKey !== envKey) {
     console.error('Admin key mismatch:', {
-      provided: providedKey.substring(0, 5) + '...',
-      envPrefix: envKey.substring(0, 5) + '...',
+      provided: providedKey || '(empty)',
+      envExists: !!envKey,
       providedLength: providedKey.length,
       envLength: envKey.length,
     });
     return NextResponse.json(
-      { error: 'Invalid admin key' },
+      { 
+        error: 'Invalid admin key',
+        hint: 'Make sure ADMIN_KEY is set correctly in Vercel environment variables and you redeployed after adding it.'
+      },
       { status: 401 }
     );
   }
