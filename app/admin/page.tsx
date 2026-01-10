@@ -37,10 +37,21 @@ export default function AdminPage() {
         setIsAuthenticated(true);
         localStorage.setItem('admin_key', adminKey);
       } else {
-        setError('Invalid admin key');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || 'Invalid admin key';
+        
+        // Show specific error messages
+        if (errorMessage.includes('not configured')) {
+          setError('Admin authentication is not configured on the server. Please contact the administrator.');
+        } else if (errorMessage.includes('Invalid admin key') || errorMessage.includes('Unauthorized')) {
+          setError('Invalid admin key. Please check your password and try again.');
+        } else {
+          setError(errorMessage);
+        }
       }
-    } catch (err) {
-      setError('Failed to authenticate. Please try again.');
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      setError('Failed to connect. Please check your internet connection and try again.');
     } finally {
       setIsLoading(false);
     }

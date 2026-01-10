@@ -33,12 +33,22 @@ function getSubscribers(): string[] {
 
 // Save emails
 function saveSubscribers(emails: string[]): void {
+  // On Vercel, file system is read-only except /tmp (which is ephemeral)
+  // So file storage only works in local development
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    console.warn('File storage not available on Vercel. Use Resend contacts API.');
+    return; // Silently fail on Vercel - file storage is not available
+  }
+
   ensureDataDir();
   try {
     fs.writeFileSync(emailsFilePath, JSON.stringify(emails, null, 2), 'utf8');
   } catch (error) {
     console.error('Error saving subscribers:', error);
-    throw error;
+    // Don't throw on local dev - might be permission issue
+    if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+      throw error;
+    }
   }
 }
 
@@ -49,7 +59,7 @@ export async function POST(request: Request) {
     // Validate email
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return NextResponse.json(
-        { error: 'Invalid email address' },
+        { error: 'Please enter a valid email address' },
         { status: 400 }
       );
     }
@@ -57,50 +67,163 @@ export async function POST(request: Request) {
     // Normalize email (lowercase, trim)
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Read existing subscribers
-    const subscribers = getSubscribers();
-
-    // Check if already subscribed
-    if (subscribers.includes(normalizedEmail)) {
+    // Validate email format more strictly
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
       return NextResponse.json(
-        { error: 'Email already subscribed' },
+        { error: 'Please enter a valid email address' },
         { status: 400 }
       );
     }
 
-    // Add new subscriber to file
-    subscribers.push(normalizedEmail);
-    saveSubscribers(subscribers);
+    // Check if we're on Vercel (production)
+    const isVercel = process.env.VERCEL || process.env.VERCEL_ENV;
 
-    // Add to Resend (if configured)
-    if (process.env.RESEND_API_KEY) {
+    // On Vercel, Resend is required (file system is read-only)
+    if (isVercel) {
+      if (!process.env.RESEND_API_KEY || !process.env.RESEND_AUDIENCE_ID) {
+        return NextResponse.json(
+          { 
+            error: 'Email subscription is not configured. Please contact the administrator.',
+            details: 'RESEND_API_KEY and RESEND_AUDIENCE_ID must be configured for email subscriptions to work.'
+          },
+          { status: 503 }
+        );
+      }
+
+      // Use Resend on Vercel
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
         
-        // Try to add to Resend contacts
-        // Note: Resend requires audience ID for contacts API
-        // For now, we'll store in file and you can manually import to Resend later
-        // Or configure RESEND_AUDIENCE_ID in .env.local to auto-add contacts
-        if (process.env.RESEND_AUDIENCE_ID) {
+        try {
           await resend.contacts.create({
             email: normalizedEmail,
             audienceId: process.env.RESEND_AUDIENCE_ID,
           });
+
+          return NextResponse.json(
+            { success: true, message: 'Successfully added to mailing list' },
+            { status: 200 }
+          );
+        } catch (resendError: any) {
+          console.error('Resend API error:', resendError);
+          
+          // Check if email already exists in Resend
+          const errorMessage = resendError?.message?.toLowerCase() || '';
+          if (errorMessage.includes('already exists') || 
+              errorMessage.includes('duplicate') ||
+              errorMessage.includes('already subscribed') ||
+              resendError?.status === 422 ||
+              resendError?.response?.status === 422) {
+            return NextResponse.json(
+              { error: 'This email is already subscribed to our mailing list' },
+              { status: 400 }
+            );
+          }
+
+          // Other Resend errors - show specific message
+          const errorMsg = resendError?.message || 'Failed to add contact to mailing list';
+          return NextResponse.json(
+            { error: `Subscription failed: ${errorMsg}` },
+            { status: 500 }
+          );
         }
-      } catch (resendError: any) {
-        console.error('Resend API error:', resendError);
-        // Continue even if Resend fails - we've saved to file
+      } catch (resendSetupError: any) {
+        console.error('Resend setup error:', resendSetupError);
+        return NextResponse.json(
+          { error: 'Email service is temporarily unavailable. Please try again later.' },
+          { status: 503 }
+        );
       }
     }
 
-    return NextResponse.json(
-      { success: true, message: 'Successfully added to mailing list' },
-      { status: 200 }
-    );
-  } catch (error) {
+    // Local development: Try Resend first, fallback to file storage
+    if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        
+        try {
+          await resend.contacts.create({
+            email: normalizedEmail,
+            audienceId: process.env.RESEND_AUDIENCE_ID,
+          });
+
+          // Also save to file for local admin panel
+          try {
+            const subscribers = getSubscribers();
+            if (!subscribers.includes(normalizedEmail)) {
+              subscribers.push(normalizedEmail);
+              saveSubscribers(subscribers);
+            }
+          } catch (fileError) {
+            // File save is optional if Resend works
+            console.warn('Could not save to file:', fileError);
+          }
+
+          return NextResponse.json(
+            { success: true, message: 'Successfully added to mailing list' },
+            { status: 200 }
+          );
+        } catch (resendError: any) {
+          // Check if email already exists
+          const errorMessage = resendError?.message?.toLowerCase() || '';
+          if (errorMessage.includes('already exists') || 
+              errorMessage.includes('duplicate') ||
+              resendError?.status === 422) {
+            return NextResponse.json(
+              { error: 'This email is already subscribed to our mailing list' },
+              { status: 400 }
+            );
+          }
+          // Fall through to file storage if Resend fails locally
+          console.warn('Resend failed, trying file storage:', resendError);
+        }
+      } catch (resendSetupError) {
+        console.warn('Resend setup failed, using file storage:', resendSetupError);
+      }
+    }
+
+    // File-based storage (local development fallback)
+    try {
+      const subscribers = getSubscribers();
+
+      // Check if already subscribed
+      if (subscribers.includes(normalizedEmail)) {
+        return NextResponse.json(
+          { error: 'This email is already subscribed to our mailing list' },
+          { status: 400 }
+        );
+      }
+
+      // Add new subscriber to file
+      subscribers.push(normalizedEmail);
+      saveSubscribers(subscribers);
+
+      return NextResponse.json(
+        { success: true, message: 'Successfully added to mailing list' },
+        { status: 200 }
+      );
+    } catch (fileError: any) {
+      console.error('File storage error:', fileError);
+      return NextResponse.json(
+        { error: `Failed to save email: ${fileError?.message || 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  } catch (error: any) {
     console.error('Subscribe error:', error);
+    
+    // Return specific error messages
+    const errorMessage = error?.message || 'Failed to subscribe. Please try again.';
+    
     return NextResponse.json(
-      { error: 'Failed to subscribe. Please try again.' },
+      { 
+        error: errorMessage.includes('already') || errorMessage.includes('duplicate') 
+          ? 'This email is already subscribed to our mailing list'
+          : errorMessage.includes('Resend') || errorMessage.includes('File storage')
+          ? errorMessage
+          : 'Failed to subscribe. Please try again later.'
+      },
       { status: 500 }
     );
   }
@@ -111,9 +234,30 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const adminKey = searchParams.get('key');
 
+  // Check if ADMIN_KEY is configured
+  if (!process.env.ADMIN_KEY) {
+    console.error('ADMIN_KEY is not set in environment variables');
+    return NextResponse.json(
+      { error: 'Admin authentication is not configured. Please set ADMIN_KEY in environment variables.' },
+      { status: 500 }
+    );
+  }
+
   // Simple admin key check (in production, use proper auth)
-  if (adminKey !== process.env.ADMIN_KEY) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Trim whitespace from both keys for comparison
+  const providedKey = adminKey?.trim() || '';
+  const envKey = process.env.ADMIN_KEY.trim();
+
+  if (providedKey !== envKey) {
+    console.error('Admin key mismatch:', {
+      providedLength: providedKey.length,
+      envLength: envKey.length,
+      match: providedKey === envKey,
+    });
+    return NextResponse.json(
+      { error: 'Invalid admin key' },
+      { status: 401 }
+    );
   }
 
   const subscribers = getSubscribers();
@@ -128,8 +272,19 @@ export async function DELETE(request: Request) {
   try {
     const { email, key } = await request.json();
 
-    // Validate admin key
-    if (key !== process.env.ADMIN_KEY) {
+    // Check if ADMIN_KEY is configured
+    if (!process.env.ADMIN_KEY) {
+      return NextResponse.json(
+        { error: 'Admin authentication is not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Validate admin key (trim whitespace)
+    const providedKey = key?.trim() || '';
+    const envKey = process.env.ADMIN_KEY.trim();
+
+    if (providedKey !== envKey) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

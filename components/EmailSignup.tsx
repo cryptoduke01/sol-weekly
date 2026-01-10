@@ -38,11 +38,25 @@ export default function EmailSignup() {
         setEmail('');
       } else {
         setStatus('error');
-        setMessage(data.error || 'Something went wrong. Please try again.');
+        // Show specific error message from API
+        const errorMsg = data.error || data.message || 'Something went wrong. Please try again.';
+        
+        // Handle specific error cases
+        if (errorMsg.toLowerCase().includes('already subscribed') || 
+            errorMsg.toLowerCase().includes('already exists')) {
+          setMessage('This email is already subscribed to our mailing list');
+        } else {
+          setMessage(errorMsg);
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       setStatus('error');
-      setMessage('Failed to subscribe. Please try again.');
+      // Show network or parsing errors
+      if (error.message) {
+        setMessage(`Connection error: ${error.message}`);
+      } else {
+        setMessage('Failed to connect. Please check your internet connection and try again.');
+      }
     }
   };
 
