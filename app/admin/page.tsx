@@ -39,12 +39,15 @@ export default function AdminPage() {
       } else {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.error || 'Invalid admin key';
+        const hint = errorData.hint || '';
         
-        // Show specific error messages
+        // Show specific error messages with hints
         if (errorMessage.includes('not configured')) {
           setError('Admin authentication is not configured on the server. Please contact the administrator.');
         } else if (errorMessage.includes('Invalid admin key') || errorMessage.includes('Unauthorized')) {
-          setError('Invalid admin key. Please check your password and try again.');
+          const fullMessage = hint ? `${errorMessage}. ${hint}` : errorMessage;
+          setError(fullMessage);
+          console.error('Admin login failed:', { error: errorMessage, hint });
         } else {
           setError(errorMessage);
         }

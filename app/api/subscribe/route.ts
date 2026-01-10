@@ -80,6 +80,34 @@ export async function POST(request: Request) {
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
         
+        // FIRST: Check if email already exists in Resend
+        try {
+          const existingContacts = await resend.contacts.list({
+            audienceId: process.env.RESEND_AUDIENCE_ID,
+          });
+          
+          // Check if email already exists
+          if (existingContacts && typeof existingContacts === 'object') {
+            const contactsData = (existingContacts as any).data;
+            if (Array.isArray(contactsData)) {
+              const existingEmails = contactsData.map((contact: any) => 
+                (contact.email || contact).toLowerCase().trim()
+              ).filter(Boolean);
+              
+              if (existingEmails.includes(normalizedEmail)) {
+                return NextResponse.json(
+                  { error: 'This email is already subscribed to our mailing list' },
+                  { status: 400 }
+                );
+              }
+            }
+          }
+        } catch (listError) {
+          console.warn('Could not check existing contacts (will try to create anyway):', listError);
+          // Continue - might be permission issue, but creation will catch duplicate
+        }
+        
+        // SECOND: Create contact (only if not found above)
         try {
           await resend.contacts.create({
             email: normalizedEmail,
@@ -105,13 +133,16 @@ export async function POST(request: Request) {
         } catch (resendError: any) {
           console.error('Resend API error:', resendError);
           
-          // Check if email already exists in Resend
-          const errorMessage = resendError?.message?.toLowerCase() || '';
+          // Check if email already exists in Resend (duplicate error)
+          const errorMessage = (resendError?.message || '').toLowerCase();
+          const errorData = resendError?.response?.data || resendError?.data || {};
+          const errorStatus = resendError?.status || resendError?.response?.status;
+          
           if (errorMessage.includes('already exists') || 
               errorMessage.includes('duplicate') ||
               errorMessage.includes('already subscribed') ||
-              resendError?.status === 422 ||
-              resendError?.response?.status === 422) {
+              errorStatus === 422 ||
+              errorMessage.includes('contact already exists')) {
             return NextResponse.json(
               { error: 'This email is already subscribed to our mailing list' },
               { status: 400 }
@@ -224,21 +255,39 @@ export async function GET(request: Request) {
   }
 
   // Decode and normalize the key (handles URL encoding)
-  const providedKey = adminKey ? decodeURIComponent(adminKey).trim() : '';
+  // Note: decodeURIComponent might fail if key isn't URL encoded, so try-catch
+  let providedKey = '';
+  try {
+    providedKey = adminKey ? decodeURIComponent(adminKey).trim() : adminKey?.trim() || '';
+  } catch {
+    // If decode fails, use raw value (key might not be encoded)
+    providedKey = (adminKey || '').trim();
+  }
+  
   const envKey = (process.env.ADMIN_KEY || '').trim();
 
+  // Debug logging (remove in production if needed)
+  console.log('Admin key check:', {
+    provided: providedKey,
+    envKey: envKey,
+    providedLength: providedKey.length,
+    envLength: envKey.length,
+    match: providedKey === envKey,
+    envExists: !!envKey,
+  });
+
   // Compare keys (case-sensitive, exact match)
-  if (!providedKey || providedKey !== envKey) {
+  if (!providedKey || !envKey || providedKey !== envKey) {
     console.error('Admin key mismatch:', {
       provided: providedKey || '(empty)',
-      envExists: !!envKey,
+      envKeySet: !!envKey,
       providedLength: providedKey.length,
       envLength: envKey.length,
     });
     return NextResponse.json(
       { 
         error: 'Invalid admin key',
-        hint: 'Make sure ADMIN_KEY is set correctly in Vercel environment variables and you redeployed after adding it.'
+        hint: `Admin key is ${envKey ? 'configured' : 'NOT configured'}. Provided key length: ${providedKey.length}. Make sure ADMIN_KEY=180476 is set in Vercel environment variables and you redeployed after adding it.`
       },
       { status: 401 }
     );
@@ -353,3 +402,4 @@ export async function DELETE(request: Request) {
     );
   }
 }
+  
