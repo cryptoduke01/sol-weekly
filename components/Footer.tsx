@@ -2,10 +2,12 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Twitter } from 'lucide-react';
 import LiveStats from './LiveStats';
+import EmailSignup from './EmailSignup';
 
 export default function Footer() {
   return (
     <>
+      <EmailSignup />
       <footer className="border-t border-bg-card/50 mt-24">
         <div className="mx-auto max-w-4xl px-6 py-12">
           <div className="flex items-center justify-between">
