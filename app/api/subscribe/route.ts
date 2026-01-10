@@ -80,34 +80,7 @@ export async function POST(request: Request) {
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
         
-        // FIRST: Check if email already exists in Resend
-        try {
-          const existingContacts = await resend.contacts.list({
-            audienceId: process.env.RESEND_AUDIENCE_ID,
-          });
-          
-          // Check if email already exists
-          if (existingContacts && typeof existingContacts === 'object') {
-            const contactsData = (existingContacts as any).data;
-            if (Array.isArray(contactsData)) {
-              const existingEmails = contactsData.map((contact: any) => 
-                (contact.email || contact).toLowerCase().trim()
-              ).filter(Boolean);
-              
-              if (existingEmails.includes(normalizedEmail)) {
-                return NextResponse.json(
-                  { error: 'This email is already subscribed to our mailing list' },
-                  { status: 400 }
-                );
-              }
-            }
-          }
-        } catch (listError) {
-          console.warn('Could not check existing contacts (will try to create anyway):', listError);
-          // Continue - might be permission issue, but creation will catch duplicate
-        }
-        
-        // SECOND: Create contact (only if not found above)
+        // Try to create contact - Resend will return error if duplicate
         try {
           await resend.contacts.create({
             email: normalizedEmail,
@@ -131,18 +104,49 @@ export async function POST(request: Request) {
             { status: 200 }
           );
         } catch (resendError: any) {
-          console.error('Resend API error:', resendError);
+          console.error('Resend create error:', {
+            message: resendError?.message,
+            status: resendError?.status,
+            statusCode: resendError?.statusCode,
+            responseStatus: resendError?.response?.status,
+            body: resendError?.body,
+            data: resendError?.data,
+            responseData: resendError?.response?.data,
+            error: resendError,
+          });
           
-          // Check if email already exists in Resend (duplicate error)
-          const errorMessage = (resendError?.message || '').toLowerCase();
-          const errorData = resendError?.response?.data || resendError?.data || {};
-          const errorStatus = resendError?.status || resendError?.response?.status;
+          // Check if email already exists in Resend (duplicate error from create)
+          // Resend returns different error formats - check all possible locations
+          const errorMessage = String(resendError?.message || '').toLowerCase();
+          const errorStatus = resendError?.status || resendError?.statusCode || resendError?.response?.status || resendError?.response?.statusCode;
+          const errorBody = resendError?.body || resendError?.data || resendError?.response?.data || resendError?.response?.body || {};
+          const errorBodyStr = typeof errorBody === 'string' ? errorBody.toLowerCase() : JSON.stringify(errorBody).toLowerCase();
           
-          if (errorMessage.includes('already exists') || 
+          // Log full error for debugging
+          console.log('Duplicate check:', {
+            errorMessage,
+            errorStatus,
+            errorBodyStr: errorBodyStr.substring(0, 200), // First 200 chars
+            is422: errorStatus === 422,
+            is409: errorStatus === 409,
+            hasAlreadyExists: errorMessage.includes('already exists') || errorBodyStr.includes('already exists'),
+            hasDuplicate: errorMessage.includes('duplicate') || errorBodyStr.includes('duplicate'),
+          });
+          
+          // Check various duplicate error indicators
+          // Common Resend duplicate errors: 422 (Unprocessable Entity), 409 (Conflict), or message contains "already exists"/"duplicate"
+          if (errorStatus === 422 || 
+              errorStatus === 409 ||
+              errorMessage.includes('already exists') || 
               errorMessage.includes('duplicate') ||
               errorMessage.includes('already subscribed') ||
-              errorStatus === 422 ||
-              errorMessage.includes('contact already exists')) {
+              errorMessage.includes('contact already exists') ||
+              errorMessage.includes('already in audience') ||
+              errorBodyStr.includes('already exists') ||
+              errorBodyStr.includes('duplicate') ||
+              errorBodyStr.includes('already in') ||
+              errorBodyStr.includes('email already')) {
+            console.log('Duplicate email detected:', normalizedEmail);
             return NextResponse.json(
               { error: 'This email is already subscribed to our mailing list' },
               { status: 400 }
