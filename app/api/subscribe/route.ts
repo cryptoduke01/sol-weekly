@@ -80,7 +80,48 @@ export async function POST(request: Request) {
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
         
-        // Try to create contact - Resend will return error if duplicate
+        // FIRST: Check if email already exists using contacts.get()
+        // Resend doesn't throw error on duplicate create, so we must check first
+        try {
+          const { data: existingContact, error: getError } = await resend.contacts.get({
+            email: normalizedEmail,
+          });
+          
+          // If contact exists (data is returned), it's a duplicate
+          if (existingContact && !getError) {
+            console.log('Duplicate email detected via get():', normalizedEmail);
+            return NextResponse.json(
+              { error: 'This email is already subscribed to our mailing list' },
+              { status: 400 }
+            );
+          }
+          
+          // If error exists, check if it's 404 (not found) or something else
+          if (getError) {
+            // Resend error format: { message: string, name?: string }
+            const errorMessage = String(getError?.message || '').toLowerCase();
+            if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+              // Contact doesn't exist - proceed to create
+              console.log('Email not found (404), will create new contact:', normalizedEmail);
+            } else {
+              // Other error - log but continue (will try to create anyway)
+              console.warn('Error checking existing contact:', getError);
+            }
+          }
+        } catch (getError: any) {
+          // If contact doesn't exist, Resend might throw or return error
+          const errorMessage = String(getError?.message || '').toLowerCase();
+          if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+            // Contact doesn't exist - proceed to create
+            console.log('Email not found (404), will create new contact:', normalizedEmail);
+          } else {
+            // Other error - log but continue (will try to create anyway)
+            console.warn('Error checking existing contact:', getError?.message || getError);
+            // Continue - creation might still work
+          }
+        }
+        
+        // SECOND: Create contact (only if not found above)
         try {
           await resend.contacts.create({
             email: normalizedEmail,
