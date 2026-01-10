@@ -122,3 +122,69 @@ export async function GET(request: Request) {
     subscribers,
   });
 }
+
+// DELETE endpoint to remove a subscriber
+export async function DELETE(request: Request) {
+  try {
+    const { email, key } = await request.json();
+
+    // Validate admin key
+    if (key !== process.env.ADMIN_KEY) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Validate email
+    if (!email || typeof email !== 'string') {
+      return NextResponse.json(
+        { error: 'Invalid email address' },
+        { status: 400 }
+      );
+    }
+
+    // Read existing subscribers
+    const subscribers = getSubscribers();
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Remove email if it exists
+    const filteredSubscribers = subscribers.filter(
+      (sub) => sub.toLowerCase().trim() !== normalizedEmail
+    );
+
+    // Only save if email was actually removed
+    if (filteredSubscribers.length === subscribers.length) {
+      return NextResponse.json(
+        { error: 'Email not found' },
+        { status: 404 }
+      );
+    }
+
+    // Save updated list
+    saveSubscribers(filteredSubscribers);
+
+    // Also remove from Resend if configured
+    if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.contacts.remove({
+          email: normalizedEmail,
+          audienceId: process.env.RESEND_AUDIENCE_ID,
+        });
+      } catch (resendError: any) {
+        console.error('Resend delete error:', resendError);
+        // Continue even if Resend fails - we've removed from file
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Email removed successfully',
+      count: filteredSubscribers.length,
+    });
+  } catch (error) {
+    console.error('Delete error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete email' },
+      { status: 500 }
+    );
+  }
+}

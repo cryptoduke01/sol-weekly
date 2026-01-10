@@ -1,6 +1,28 @@
 # How to Access Email List
 
-## Method 1: Direct File Access (Easiest)
+## Method 1: Admin Dashboard (Recommended) ✨
+
+**Access:** Visit `/admin` on your site
+
+**Setup:**
+1. Add `ADMIN_KEY` to `.env.local`:
+   ```env
+   ADMIN_KEY=your_secret_password_here
+   ```
+2. Visit `http://localhost:3000/admin` (or `https://yoursite.com/admin` in production)
+3. Enter your admin key to login
+4. View, export, and manage all subscribers
+
+**Features:**
+- ✅ View all subscribers with count
+- ✅ Delete individual emails
+- ✅ Export to CSV
+- ✅ Secure login with key storage (remembers you)
+- ✅ Clean, responsive UI
+
+---
+
+## Method 2: Direct File Access (Easiest)
 
 **Location:** `data/subscribers.json`
 
