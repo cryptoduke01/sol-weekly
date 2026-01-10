@@ -35,9 +35,11 @@ function getSubscribers(): string[] {
 function saveSubscribers(emails: string[]): void {
   // On Vercel, file system is read-only except /tmp (which is ephemeral)
   // So file storage only works in local development
-  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+  const isVercel = process.env.VERCEL || process.env.VERCEL_ENV;
+  if (isVercel) {
     console.warn('File storage not available on Vercel. Use Resend contacts API.');
-    return; // Silently fail on Vercel - file storage is not available
+    // Don't throw - let caller handle gracefully
+    return;
   }
 
   ensureDataDir();
@@ -45,10 +47,7 @@ function saveSubscribers(emails: string[]): void {
     fs.writeFileSync(emailsFilePath, JSON.stringify(emails, null, 2), 'utf8');
   } catch (error) {
     console.error('Error saving subscribers:', error);
-    // Don't throw on local dev - might be permission issue
-    if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
-      throw error;
-    }
+    throw error; // Throw so caller can handle
   }
 }
 
@@ -76,22 +75,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if we're on Vercel (production)
-    const isVercel = process.env.VERCEL || process.env.VERCEL_ENV;
-
-    // On Vercel, Resend is required (file system is read-only)
-    if (isVercel) {
-      if (!process.env.RESEND_API_KEY || !process.env.RESEND_AUDIENCE_ID) {
-        return NextResponse.json(
-          { 
-            error: 'Email subscription is not configured. Please contact the administrator.',
-            details: 'RESEND_API_KEY and RESEND_AUDIENCE_ID must be configured for email subscriptions to work.'
-          },
-          { status: 503 }
-        );
-      }
-
-      // Use Resend on Vercel
+    // Try Resend first (if fully configured with audience ID)
+    if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
         
@@ -100,6 +85,18 @@ export async function POST(request: Request) {
             email: normalizedEmail,
             audienceId: process.env.RESEND_AUDIENCE_ID,
           });
+
+          // Also try to save to file (for admin panel) - optional
+          try {
+            const subscribers = getSubscribers();
+            if (!subscribers.includes(normalizedEmail)) {
+              subscribers.push(normalizedEmail);
+              saveSubscribers(subscribers);
+            }
+          } catch (fileError) {
+            // File save is optional if Resend works
+            console.warn('Could not save to file (this is normal on Vercel):', fileError);
+          }
 
           return NextResponse.json(
             { success: true, message: 'Successfully added to mailing list' },
@@ -121,69 +118,37 @@ export async function POST(request: Request) {
             );
           }
 
-          // Other Resend errors - show specific message
-          const errorMsg = resendError?.message || 'Failed to add contact to mailing list';
-          return NextResponse.json(
-            { error: `Subscription failed: ${errorMsg}` },
-            { status: 500 }
-          );
-        }
-      } catch (resendSetupError: any) {
-        console.error('Resend setup error:', resendSetupError);
-        return NextResponse.json(
-          { error: 'Email service is temporarily unavailable. Please try again later.' },
-          { status: 503 }
-        );
-      }
-    }
-
-    // Local development: Try Resend first, fallback to file storage
-    if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
-      try {
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        
-        try {
-          await resend.contacts.create({
-            email: normalizedEmail,
-            audienceId: process.env.RESEND_AUDIENCE_ID,
-          });
-
-          // Also save to file for local admin panel
-          try {
-            const subscribers = getSubscribers();
-            if (!subscribers.includes(normalizedEmail)) {
-              subscribers.push(normalizedEmail);
-              saveSubscribers(subscribers);
-            }
-          } catch (fileError) {
-            // File save is optional if Resend works
-            console.warn('Could not save to file:', fileError);
-          }
-
-          return NextResponse.json(
-            { success: true, message: 'Successfully added to mailing list' },
-            { status: 200 }
-          );
-        } catch (resendError: any) {
-          // Check if email already exists
-          const errorMessage = resendError?.message?.toLowerCase() || '';
-          if (errorMessage.includes('already exists') || 
-              errorMessage.includes('duplicate') ||
-              resendError?.status === 422) {
+          // If Resend fails and we're not on Vercel, fall through to file storage
+          const isVercel = process.env.VERCEL || process.env.VERCEL_ENV;
+          if (isVercel) {
+            // On Vercel, if Resend fails, we can't use file storage - show error
+            const errorMsg = resendError?.message || 'Failed to add contact to mailing list';
             return NextResponse.json(
-              { error: 'This email is already subscribed to our mailing list' },
-              { status: 400 }
+              { error: `Subscription failed: ${errorMsg}` },
+              { status: 500 }
             );
           }
-          // Fall through to file storage if Resend fails locally
+          // On local, fall through to file storage
           console.warn('Resend failed, trying file storage:', resendError);
         }
-      } catch (resendSetupError) {
-        console.warn('Resend setup failed, using file storage:', resendSetupError);
+      } catch (resendSetupError: any) {
+        console.warn('Resend setup failed:', resendSetupError);
+        // Fall through to file storage on local
       }
     }
 
-    // File-based storage (local development fallback)
+    // File-based storage (works on local, not on Vercel)
+    const isVercel = process.env.VERCEL || process.env.VERCEL_ENV;
+    
+    // On Vercel, file storage doesn't work - require Resend
+    if (isVercel) {
+      return NextResponse.json(
+        { error: 'Email subscription requires RESEND_AUDIENCE_ID to be configured. Please set it in your Vercel environment variables.' },
+        { status: 503 }
+      );
+    }
+
+    // Local file storage
     try {
       const subscribers = getSubscribers();
 
@@ -243,16 +208,17 @@ export async function GET(request: Request) {
     );
   }
 
-  // Simple admin key check (in production, use proper auth)
-  // Trim whitespace from both keys for comparison
-  const providedKey = adminKey?.trim() || '';
+  // Decode the key properly (handles URL encoding of special characters like #)
+  const providedKey = decodeURIComponent(adminKey || '').trim();
   const envKey = process.env.ADMIN_KEY.trim();
 
+  // Compare keys
   if (providedKey !== envKey) {
     console.error('Admin key mismatch:', {
+      provided: providedKey.substring(0, 5) + '...',
+      envPrefix: envKey.substring(0, 5) + '...',
       providedLength: providedKey.length,
       envLength: envKey.length,
-      match: providedKey === envKey,
     });
     return NextResponse.json(
       { error: 'Invalid admin key' },
@@ -260,10 +226,36 @@ export async function GET(request: Request) {
     );
   }
 
+  // Get subscribers from file (for admin panel)
   const subscribers = getSubscribers();
+  
+  // Also try to get from Resend if configured
+  let resendSubscribers: string[] = [];
+  if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const contactsResponse = await resend.contacts.list({
+        audienceId: process.env.RESEND_AUDIENCE_ID,
+      });
+      // Resend API returns data in different format - handle both cases
+      if (contactsResponse && typeof contactsResponse === 'object') {
+        const contactsData = (contactsResponse as any).data;
+        if (Array.isArray(contactsData)) {
+          resendSubscribers = contactsData.map((contact: any) => contact.email || contact).filter(Boolean);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch from Resend:', err);
+      // Continue with file-based subscribers only
+    }
+  }
+
+  // Merge both lists (file + Resend), remove duplicates
+  const allSubscribers = Array.from(new Set([...subscribers, ...resendSubscribers]));
+
   return NextResponse.json({
-    count: subscribers.length,
-    subscribers,
+    count: allSubscribers.length,
+    subscribers: allSubscribers,
   });
 }
 
@@ -280,8 +272,8 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Validate admin key (trim whitespace)
-    const providedKey = key?.trim() || '';
+    // Validate admin key (handle special characters)
+    const providedKey = (key || '').toString().trim();
     const envKey = process.env.ADMIN_KEY.trim();
 
     if (providedKey !== envKey) {
