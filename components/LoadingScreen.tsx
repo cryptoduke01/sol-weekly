@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const messages = [
-  'Increase Bandwidth',
-  'Reduce Latency',
+  'Increase Bandwidth, Reduce Latency',
 ];
 
 export default function LoadingScreen() {

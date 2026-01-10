@@ -48,9 +48,22 @@ export default function MarkdownContent({ content, readingMode = false }: Markdo
           strong: ({ node, ...props }) => (
             <strong className="font-normal text-text-primary" {...props} />
           ),
-          a: ({ node, ...props }) => (
-            <a className="text-text-primary border-b border-text-muted hover:border-text-primary transition-colors" {...props} />
-          ),
+          a: ({ node, ...props }: any) => {
+            const href = props.href || '';
+            const isTwitter = href.includes('twitter.com') || href.includes('x.com');
+            return (
+              <a 
+                className={cn(
+                  'text-text-primary border-b border-text-muted hover:border-text-primary transition-colors',
+                  isTwitter && 'hover:text-blue-400'
+                )}
+                href={href}
+                target={href.startsWith('http') ? '_blank' : undefined}
+                rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                {...props}
+              />
+            );
+          },
           code: ({ node, inline, ...props }: any) => {
             if (inline) {
               return (

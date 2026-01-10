@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { Calendar, Clock } from 'lucide-react';
 import { Roundup } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
@@ -36,16 +37,22 @@ export default function BlogHeader({ roundup }: BlogHeaderProps) {
         {roundup.description}
       </p>
 
-      {/* Featured Image Placeholder */}
+      {/* Featured Image */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
-        className="w-full h-64 md:h-80 lg:h-96 border border-bg-card/50 rounded-lg overflow-hidden bg-bg-card/30"
+        className="relative w-full h-64 md:h-80 lg:h-96 rounded-lg overflow-hidden border border-bg-card/50"
       >
-        <div className="w-full h-full bg-gradient-to-br from-bg-card/50 to-bg-card/30 flex items-center justify-center">
-          <p className="text-text-muted text-xs md:text-sm font-light">Featured image placeholder</p>
-        </div>
+        <Image
+          src="/placeholder.PNG"
+          alt={roundup.title}
+          fill
+          className="object-cover object-top"
+          priority
+        />
+        {/* Gradient overlay at bottom */}
+        <div className="absolute inset-0 bg-gradient-to-t from-bg-primary via-bg-primary/80 to-transparent" />
       </motion.div>
     </motion.div>
   );

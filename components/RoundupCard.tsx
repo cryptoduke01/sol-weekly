@@ -73,12 +73,6 @@ export default function RoundupCard({
             {roundup.description}
           </p>
 
-          {/* Image Placeholder */}
-          <div className="mt-4 md:mt-6 w-full h-48 md:h-64 border border-bg-card/50 rounded-lg overflow-hidden bg-bg-card/30">
-            <div className="w-full h-full bg-gradient-to-br from-bg-card/50 to-bg-card/30 flex items-center justify-center">
-              <p className="text-text-muted text-xs md:text-sm font-light">Image placeholder</p>
-            </div>
-          </div>
 
           {roundup.categories.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3 md:mt-4">
