@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Download, Trash2, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Download, Trash2, Loader2, Lock, Eye, EyeOff, Send, TestTube, Check, X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SubscriberData {
@@ -17,6 +17,11 @@ export default function AdminPage() {
   const [data, setData] = useState<SubscriberData | null>(null);
   const [error, setError] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const [isSendingNewsletter, setIsSendingNewsletter] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [newsletterStatus, setNewsletterStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,6 +134,100 @@ export default function AdminPage() {
     setIsAuthenticated(false);
     setAdminKey('');
     setData(null);
+    setError('');
+    setNewsletterStatus(null);
+    setShowTestModal(false);
+    setTestEmail('');
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmail || !testEmail.includes('@')) {
+      setNewsletterStatus({ type: 'error', message: 'Please enter a valid email address' });
+      return;
+    }
+
+    setIsTestingEmail(true);
+    setNewsletterStatus(null);
+
+    try {
+      const savedKey = localStorage.getItem('admin_key') || adminKey;
+      const response = await fetch('/api/newsletter/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          adminKey: savedKey,
+          testEmail: testEmail.trim(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setNewsletterStatus({
+          type: 'success',
+          message: `Test email sent to ${testEmail}! Check your inbox and spam folder.`,
+        });
+        setTestEmail('');
+        setShowTestModal(false);
+      } else {
+        setNewsletterStatus({
+          type: 'error',
+          message: result.error || 'Failed to send test email',
+        });
+      }
+    } catch (err: any) {
+      setNewsletterStatus({
+        type: 'error',
+        message: `Failed to send test email: ${err.message || 'Unknown error'}`,
+      });
+    } finally {
+      setIsTestingEmail(false);
+    }
+  };
+
+  const handleSendNewsletter = async () => {
+    if (!confirm(`Send newsletter to all ${data?.count || 0} subscribers?`)) {
+      return;
+    }
+
+    setIsSendingNewsletter(true);
+    setNewsletterStatus(null);
+
+    try {
+      const savedKey = localStorage.getItem('admin_key') || adminKey;
+      const response = await fetch('/api/newsletter/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          adminKey: savedKey,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setNewsletterStatus({
+          type: 'success',
+          message: `Newsletter sent successfully! ${result.sent || 0} emails sent${result.failed > 0 ? ` (${result.failed} failed)` : ''}.`,
+        });
+      } else {
+        setNewsletterStatus({
+          type: 'error',
+          message: result.error || 'Failed to send newsletter',
+        });
+      }
+    } catch (err: any) {
+      setNewsletterStatus({
+        type: 'error',
+        message: `Failed to send newsletter: ${err.message || 'Unknown error'}`,
+      });
+    } finally {
+      setIsSendingNewsletter(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -229,7 +328,7 @@ export default function AdminPage() {
         {/* Stats */}
         {data && (
           <div className="border border-bg-card/50 rounded-lg p-6 mb-8 bg-bg-card/30">
-            <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-bg-card flex items-center justify-center">
                   <Mail className="h-5 w-5 text-text-primary" />
@@ -257,6 +356,159 @@ export default function AdminPage() {
                 <span>Export CSV</span>
               </button>
             </div>
+
+            {/* Newsletter Actions */}
+            <div className="flex flex-wrap gap-3 pt-4 border-t border-bg-card/50">
+              <button
+                onClick={() => setShowTestModal(true)}
+                disabled={isTestingEmail || isSendingNewsletter}
+                className={cn(
+                  'px-4 py-2 border border-bg-card/50 rounded-lg text-sm font-light transition-colors flex items-center gap-2',
+                  isTestingEmail || isSendingNewsletter
+                    ? 'bg-bg-card/50 text-text-muted cursor-not-allowed'
+                    : 'bg-bg-card hover:bg-bg-card/80 text-text-primary hover:border-text-muted/50 cursor-pointer'
+                )}
+              >
+                {isTestingEmail ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <TestTube className="h-4 w-4" />
+                    <span>Test Email</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleSendNewsletter}
+                disabled={!data.count || isSendingNewsletter || isTestingEmail}
+                className={cn(
+                  'px-4 py-2 border border-bg-card/50 rounded-lg text-sm font-light transition-colors flex items-center gap-2',
+                  !data.count || isSendingNewsletter || isTestingEmail
+                    ? 'bg-bg-card/50 text-text-muted cursor-not-allowed'
+                    : 'bg-bg-card hover:bg-bg-card/80 text-text-primary hover:border-text-muted/50 cursor-pointer'
+                )}
+              >
+                {isSendingNewsletter ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    <span>Send Newsletter</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Status Messages */}
+            {newsletterStatus && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  'mt-4 p-3 rounded-lg flex items-center gap-2 text-sm',
+                  newsletterStatus.type === 'success'
+                    ? 'bg-green-500/20 border border-green-500/50 text-green-500'
+                    : 'bg-red-500/20 border border-red-500/50 text-red-500'
+                )}
+              >
+                {newsletterStatus.type === 'success' ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <p className="font-light">{newsletterStatus.message}</p>
+                <button
+                  onClick={() => setNewsletterStatus(null)}
+                  className="ml-auto text-current hover:opacity-70 transition-opacity cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </motion.div>
+            )}
+          </div>
+        )}
+
+        {/* Test Email Modal */}
+        {showTestModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-bg-card border border-bg-card/50 rounded-lg p-6 max-w-md w-full"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-light text-text-primary">Send Test Email</h3>
+                <button
+                  onClick={() => {
+                    setShowTestModal(false);
+                    setTestEmail('');
+                  }}
+                  className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-light text-text-secondary mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full px-4 py-2 bg-bg-primary border border-bg-card/50 rounded-lg text-text-primary placeholder:text-text-muted font-light text-sm focus:outline-none focus:border-text-muted/50 transition-colors"
+                    disabled={isTestingEmail}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !isTestingEmail) {
+                        handleTestEmail();
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleTestEmail}
+                    disabled={isTestingEmail || !testEmail.includes('@')}
+                    className={cn(
+                      'flex-1 px-4 py-2 border border-bg-card/50 rounded-lg text-sm font-light transition-colors flex items-center justify-center gap-2',
+                      isTestingEmail || !testEmail.includes('@')
+                        ? 'bg-bg-card/50 text-text-muted cursor-not-allowed'
+                        : 'bg-bg-card hover:bg-bg-card/80 text-text-primary hover:border-text-muted/50 cursor-pointer'
+                    )}
+                  >
+                    {isTestingEmail ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        <span>Send Test</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowTestModal(false);
+                      setTestEmail('');
+                    }}
+                    disabled={isTestingEmail}
+                    className="px-4 py-2 border border-bg-card/50 rounded-lg text-sm font-light text-text-muted hover:text-text-primary hover:border-text-muted/50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </div>
         )}
 
