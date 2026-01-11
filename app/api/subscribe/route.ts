@@ -287,88 +287,125 @@ export async function POST(request: Request) {
 
 // Optional: GET endpoint to view subscribers (for admin/debugging)
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const adminKey = searchParams.get('key');
+  try {
+    const { searchParams } = new URL(request.url);
+    const adminKey = searchParams.get('key');
 
-  // Check if ADMIN_KEY is configured
-  if (!process.env.ADMIN_KEY) {
-    console.error('ADMIN_KEY is not set in environment variables');
+    // Check if ADMIN_KEY is configured
+    if (!process.env.ADMIN_KEY) {
+      console.error('ADMIN_KEY is not set in environment variables');
+      return NextResponse.json(
+        { 
+          error: 'Admin authentication is not configured. Please set ADMIN_KEY in environment variables.',
+          hint: 'ADMIN_KEY is NOT configured in Vercel. Add ADMIN_KEY=180476 to your Vercel environment variables and redeploy.'
+        },
+        { status: 500 }
+      );
+    }
+
+    // Decode and normalize the key (handles URL encoding)
+    let providedKey = '';
+    try {
+      providedKey = adminKey ? decodeURIComponent(adminKey).trim() : adminKey?.trim() || '';
+    } catch {
+      // If decode fails, use raw value (key might not be encoded)
+      providedKey = (adminKey || '').trim();
+    }
+    
+    const envKey = (process.env.ADMIN_KEY || '').trim();
+
+    // Debug logging
+    console.log('Admin key check:', {
+      provided: providedKey,
+      envKey: envKey,
+      providedLength: providedKey.length,
+      envLength: envKey.length,
+      match: providedKey === envKey,
+      envExists: !!envKey,
+    });
+
+    // Compare keys (case-sensitive, exact match)
+    if (!providedKey || !envKey || providedKey !== envKey) {
+      console.error('Admin key mismatch:', {
+        provided: providedKey || '(empty)',
+        envKeyValue: envKey || '(not set)',
+        providedLength: providedKey.length,
+        envLength: envKey.length,
+        exactMatch: providedKey === envKey,
+      });
+      return NextResponse.json(
+        { 
+          error: 'Invalid admin key',
+          hint: `Admin key ${envKey ? 'is configured' : 'is NOT configured'}. Provided: "${providedKey}" (length: ${providedKey.length}). Expected length: ${envKey.length}. Make sure ADMIN_KEY=180476 is set in Vercel environment variables (Production) and you redeployed after adding it.`
+        },
+        { status: 401 }
+      );
+    }
+
+    // Get subscribers from Resend (primary source on Vercel)
+    let subscribersList: string[] = [];
+    
+    if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const { data: contactsResponse, error: listError } = await resend.contacts.list({
+          audienceId: process.env.RESEND_AUDIENCE_ID,
+        });
+        
+        if (listError) {
+          console.error('Resend contacts.list error:', listError);
+          // If Resend fails, try file storage as fallback
+        } else if (contactsResponse) {
+          // Resend API returns { data: [...] } format
+          if (Array.isArray(contactsResponse)) {
+            subscribersList = contactsResponse
+              .map((contact: any) => (contact.email || '').toLowerCase().trim())
+              .filter((email: string, index: number) => {
+                const contact = contactsResponse[index];
+                return email && !contact?.unsubscribed;
+              });
+          } else if (contactsResponse.data && Array.isArray(contactsResponse.data)) {
+            subscribersList = contactsResponse.data
+              .map((contact: any) => (contact.email || '').toLowerCase().trim())
+              .filter((email: string, index: number) => {
+                const contact = contactsResponse.data[index];
+                return email && !contact?.unsubscribed;
+              });
+          }
+        }
+      } catch (err: any) {
+        console.error('Error fetching from Resend:', err?.message || err);
+        // Fallback to file storage on error
+      }
+    }
+
+    // Fallback: Get subscribers from file (if Resend failed or not configured)
+    if (subscribersList.length === 0) {
+      try {
+        subscribersList = getSubscribers();
+      } catch (fileError) {
+        console.warn('Could not read file subscribers:', fileError);
+        subscribersList = [];
+      }
+    }
+
+    // Remove duplicates and sort
+    const allSubscribers = Array.from(new Set(subscribersList)).sort();
+
+    return NextResponse.json({
+      count: allSubscribers.length,
+      subscribers: allSubscribers,
+    });
+  } catch (error: any) {
+    console.error('GET /api/subscribe error:', error);
     return NextResponse.json(
-      { error: 'Admin authentication is not configured. Please set ADMIN_KEY in environment variables.' },
+      { 
+        error: 'Failed to fetch subscribers',
+        hint: error?.message || 'Unknown error occurred'
+      },
       { status: 500 }
     );
   }
-
-  // Decode and normalize the key (handles URL encoding)
-  // Note: decodeURIComponent might fail if key isn't URL encoded, so try-catch
-  let providedKey = '';
-  try {
-    providedKey = adminKey ? decodeURIComponent(adminKey).trim() : adminKey?.trim() || '';
-  } catch {
-    // If decode fails, use raw value (key might not be encoded)
-    providedKey = (adminKey || '').trim();
-  }
-  
-  const envKey = (process.env.ADMIN_KEY || '').trim();
-
-  // Debug logging (remove in production if needed)
-  console.log('Admin key check:', {
-    provided: providedKey,
-    envKey: envKey,
-    providedLength: providedKey.length,
-    envLength: envKey.length,
-    match: providedKey === envKey,
-    envExists: !!envKey,
-  });
-
-  // Compare keys (case-sensitive, exact match)
-  if (!providedKey || !envKey || providedKey !== envKey) {
-    console.error('Admin key mismatch:', {
-      provided: providedKey || '(empty)',
-      envKeySet: !!envKey,
-      providedLength: providedKey.length,
-      envLength: envKey.length,
-    });
-    return NextResponse.json(
-      { 
-        error: 'Invalid admin key',
-        hint: `Admin key is ${envKey ? 'configured' : 'NOT configured'}. Provided key length: ${providedKey.length}. Make sure ADMIN_KEY=180476 is set in Vercel environment variables and you redeployed after adding it.`
-      },
-      { status: 401 }
-    );
-  }
-
-  // Get subscribers from file (for admin panel)
-  const subscribers = getSubscribers();
-  
-  // Also try to get from Resend if configured
-  let resendSubscribers: string[] = [];
-  if (process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID) {
-    try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const contactsResponse = await resend.contacts.list({
-        audienceId: process.env.RESEND_AUDIENCE_ID,
-      });
-      // Resend API returns data in different format - handle both cases
-      if (contactsResponse && typeof contactsResponse === 'object') {
-        const contactsData = (contactsResponse as any).data;
-        if (Array.isArray(contactsData)) {
-          resendSubscribers = contactsData.map((contact: any) => contact.email || contact).filter(Boolean);
-        }
-      }
-    } catch (err) {
-      console.warn('Could not fetch from Resend:', err);
-      // Continue with file-based subscribers only
-    }
-  }
-
-  // Merge both lists (file + Resend), remove duplicates
-  const allSubscribers = Array.from(new Set([...subscribers, ...resendSubscribers]));
-
-  return NextResponse.json({
-    count: allSubscribers.length,
-    subscribers: allSubscribers,
-  });
 }
 
 // DELETE endpoint to remove a subscriber
